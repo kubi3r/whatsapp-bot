@@ -1,0 +1,8 @@
+{
+    "chatID": "",
+    "workersApiKey": "",
+    "workersAccountID": "",
+    "textModel": "@cf/meta/llama-3.1-70b-instruct",
+    "imageModel": "@cf/black-forest-labs/flux-1-schnell",
+    "defaultPrompt": "You are a friendly assistant"
+}
