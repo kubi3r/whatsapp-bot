@@ -180,7 +180,7 @@ client.on('message_create', async message => {
 
     if (message.body.startsWith('/')) { // Command handling
         const command = message.body.split(' ')[0].toLowerCase()
-        const argument = message.body.substring(message.body.indexOf(' ')+1)
+        let argument = message.body.substring(message.body.indexOf(' ')+1)
 
         console.log(command, argument)
 
@@ -199,18 +199,24 @@ client.on('message_create', async message => {
                 client.sendMessage(config.chatID, `Added ${argument} to prompt`)
                 break
             case '/saveprompt':
-                if (savedPrompts[argument.toLowerCase()]) {
+                if (savedPrompts[argument]) {
                     client.sendMessage(config.chatID, 'Prompt with this name already exists')
                     break
                 }
-                savedPrompts[argument.toLowerCase()] = prompt
+                savedPrompts[argument] = prompt
                 await saveFile('./prompts.json', savedPrompts)
                 client.sendMessage(config.chatID, 'Saved prompt')
                 break
             case '/loadprompt':
                 if (savedPrompts[argument.toLowerCase()]) {
+                    console.log(savedPrompts[argument.toLowerCase()])
                     prompt = savedPrompts[argument.toLowerCase()]
-                    client.sendMessage(config.chatID, 'Loaded prompt')
+                    context = {
+                        "messages": [
+                            {"role": "system", "content": prompt}
+                        ]
+                    }
+                    client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
                 } else {
                     client.sendMessage(config.chatID, `Prompt doesn't exist, run /listprompts to see available options`)
                 }
