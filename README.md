@@ -4,13 +4,15 @@ WhatsApp bot made using wweb.js that uses AI to respond to messages with text an
 
 ## Commands:
 * `/ask {message}` (useful if you want to interact with the bot from the WhatsApp account it is hosted on)
-* `/newprompt {prompt}` (sets a new prompt for the AI)
-* `/saveprompt {promptName}` (saves prompt to a JSON file so that it isn't lost after a restart)
-* `/loadprompt {promptName}` (loads prompt from JSON file, and sets it for the AI to use)
-* `/listprompts` (lists all saved prompts)
+* `/newprompt {prompt}` (sets a new system prompt for the AI)
+* `/addtoprompt {prompt}` (adds more to existing system prompt)
+* `/saveprompt {promptName}` (saves system prompt to prompts.json so that it isn't lost after a restart)
+* `/loadprompt {promptName}` (loads system prompt from prompts.json, and sets it for the AI to use)
+* `/deleteprompt {promptName}` (deletes a system prompt saved in prompts.json)
+* `/listprompts` (lists all saved system prompts)
 * `/setchat` (changes the chat ID value in the config to the ID of the channel command is ran in)
 
-Currently cloudflare provides access to the AI models for free
+Currently cloudflare provides API access to AI models for free
 
 ## Usage
 
@@ -32,7 +34,6 @@ To get an api key and account id:
 6. Press "Create API Token"
 7. Copy API Token into config
 
-List of models you can use: https://developers.cloudflare.com/workers-ai/models/
-
 Then, run the following in your terminal: npm install && npm start
 
+List of models you can use: https://developers.cloudflare.com/workers-ai/models/
