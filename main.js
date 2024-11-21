@@ -3,12 +3,12 @@ const qrcode = require('qrcode-terminal');
 const axios = require('axios');
 const fs = require('fs');
 
-let savedPrompts = readJSON('./prompts.json')
-let config = readJSON('./config.json')
-
 if (!fs.existsSync('./prompts.json') || fs.statSync('./prompts.json').size == 0) { // If file doesn't exist/is empty
     fs.writeFileSync('./prompts.json', '{}', { flag: 'w+' })
 }
+
+let savedPrompts = readJSON('./prompts.json')
+let config = readJSON('./config.json')
 
 let prompt = config.defaultPrompt
 
