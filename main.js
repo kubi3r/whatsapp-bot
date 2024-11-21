@@ -74,7 +74,7 @@ async function generateText(prompt) {
 
         return result
     } catch (error) {
-        console.error(error)
+        console.log(error)
     }
 }
 
@@ -129,9 +129,24 @@ async function generateImage(prompt) {
     return result
 }
 
-async function createResponse(prompt) {
-    let response = await generateText(prompt)
+async function processVoice(audio) {
+    const decodedBase = Buffer.from(audio.data, 'base64')
 
+    return await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/@cf/openai/whisper`, 
+        decodedBase,
+        {
+            headers: {
+                'Authorization': `Bearer ${config.workersApiKey}`
+            }
+        }
+    ).then(response => {
+        return response.data.result.text
+    })
+}
+
+async function createResponse(prompt) {
+
+    let response = await generateText(prompt)
     if (response.startsWith('/')) { // Make sure the bot doesn't get itself into a loop
         while (response.startsWith('/')) {
             response = response.slice(1)
@@ -171,29 +186,37 @@ client.on('qr', qr => {
 
 client.on('message_create', async message => {
     try {
-        if (typeof message.body !== 'string') {
+        if (typeof message.body !== 'string' && message.type !== 'ptt') {
             return
         }
-
         if (message.id.remote !== config.chatID) {
             if (message.body === '/setchat' && message.fromMe === true) {
                 config.chatID = message.id.remote
-                saveJSON('./config.json', config)
+                await saveJSON('./config.json', config)
                 console.log('Chat ID set to:', message.id.remote)
             }
             return
         }
 
-        if (message.fromMe === true) {
+        if (message.fromMe === true && message.type !== 'ptt') {
             if (!message.body.startsWith('/')) {
                 return
             }
         }
 
-        console.log('New message:', message.body)
+        let userMessage
 
-        if (message.body.startsWith('/')) {
-            const parts = message.body.split(' ')
+        if (message.type === 'ptt') { // Handle voice messages
+            userMessage = await processVoice(await message.downloadMedia())
+            console.log('New voice message:', userMessage)
+        } else {
+            userMessage = message.body
+            console.log('New message:', userMessage)
+        }
+
+
+        if (message.type !== 'ptt' && userMessage.startsWith('/')) {
+            const parts = userMessage.split(' ')
             const command = parts[0]
             const argument = parts.slice(1).join(" ")
             
@@ -282,7 +305,7 @@ client.on('message_create', async message => {
             }
             return
         }
-        const [textResponse, media] = await createResponse(message.body)
+        const [textResponse, media] = await createResponse(userMessage)
 
         await client.sendMessage(config.chatID, media, { caption: textResponse })
 
