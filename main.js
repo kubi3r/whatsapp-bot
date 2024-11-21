@@ -232,7 +232,17 @@ client.on('message_create', async message => {
                         context = resetContext(prompt)
                         client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
                     } else {
-                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see available options`)
+                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                    }
+                    break
+                
+                case '/deleteprompt':
+                    if (savedPrompts[argument]) {
+                        delete savedPrompts[argument]
+                        await saveJSON('./prompts.json', savedPrompts)
+                        client.sendMessage(config.chatID, `Deleted prompt ${argument}`)
+                    } else {
+                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
                     }
                     break
 
