@@ -3,19 +3,12 @@ const qrcode = require('qrcode-terminal');
 const axios = require('axios');
 const fs = require('fs');
 
-function readFile(file) {
-    try {
-        const data = fs.readFileSync(file);
-        return JSON.parse(data);
-    } catch (err) {
-        throw err;
-    }
+let savedPrompts = readJSON('./prompts.json')
+let config = readJSON('./config.json')
+
+if (!fs.existsSync('./prompts.json') || fs.statSync('./prompts.json').size == 0) { // If file doesn't exist/is empty
+    fs.writeFileSync('./prompts.json', '{}', { flag: 'w+' })
 }
-
-
-let savedPrompts = readFile('./prompts.json')
-let config = readFile('./config.json')
-
 
 let prompt = config.defaultPrompt
 
@@ -25,7 +18,17 @@ let context = {
     ]
 }
 
-async function saveFile(file, data) {
+
+function readJSON(file) {
+    try {
+        const data = fs.readFileSync(file);
+        return JSON.parse(data);
+    } catch (err) {
+        throw err;
+    }
+}
+
+async function saveJSON(file, data) {
     try {
         if (typeof data === 'object') {
             data = JSON.stringify(data, null, 4);
@@ -40,11 +43,20 @@ async function saveFile(file, data) {
     }
 }
 
+function resetContext(newPrompt) {
+    return {
+        messages: [
+            { role: 'system', content: newPrompt }
+        ]
+    }
+}
+
 async function generateText(prompt) {
     try {
-        if (context.messages.length >= 11) {
+        if (context.messages.length >= 11) { // Keep 5 messages in memory
             context.messages.splice(1, 2)
         }
+
         context.messages.push({"role": "user", "content": prompt})
 
         const result = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${config.textModel}`, 
@@ -61,7 +73,6 @@ async function generateText(prompt) {
         context.messages.push({"role": "assistant", "content": result})
 
         return result
-
     } catch (error) {
         console.error(error)
     }
@@ -131,9 +142,9 @@ async function createResponse(prompt) {
 
     const imagePrompt = await summarizeForImageGen(response)
 
-    console.log("Generated summary for image generation:", imagePrompt)
-
     const image = await generateImage(imagePrompt)
+
+    console.log("Generated image using prompt:", imagePrompt)
 
     const media = new MessageMedia('image/jpeg', image)
     return [response, media]
@@ -159,79 +170,88 @@ client.on('qr', qr => {
 })
 
 client.on('message_create', async message => {
-    if (typeof message.body !== 'string') {
-        return
-    }
-    if (message.id.remote !== config.chatID) {
-        if (message.body === '/setchat') {
-            config.chatID = message.id.remote
-            saveFile('./config.json', config)
-            console.log('Chat ID set to:', message.id.remote)
-        }
-        return
-    }
-    if (message.fromMe === true) {
-        if (!message.body.startsWith('/')) { // Lets you use commands from the account of the bot
+    try {
+        if (typeof message.body !== 'string') {
             return
         }
-    }
 
-    console.log('New message:', message.body)
-
-    if (message.body.startsWith('/')) { // Command handling
-        const command = message.body.split(' ')[0].toLowerCase()
-        let argument = message.body.substring(message.body.indexOf(' ')+1)
-
-        console.log(command, argument)
-
-        switch (command) {
-            case '/ask':
-                const [textResponse, media] = await createResponse(argument)
-                await client.sendMessage(config.chatID, media, { caption: textResponse })
-
-                break
-            case '/newprompt':
-                prompt = argument
-                client.sendMessage(config.chatID, 'Set new prompt')
-                break
-            case '/addtoprompt':
-                prompt = prompt + '\n' + argument
-                client.sendMessage(config.chatID, `Added ${argument} to prompt`)
-                break
-            case '/saveprompt':
-                if (savedPrompts[argument]) {
-                    client.sendMessage(config.chatID, 'Prompt with this name already exists')
-                    break
-                }
-                savedPrompts[argument] = prompt
-                await saveFile('./prompts.json', savedPrompts)
-                client.sendMessage(config.chatID, 'Saved prompt')
-                break
-            case '/loadprompt':
-                if (savedPrompts[argument.toLowerCase()]) {
-                    console.log(savedPrompts[argument.toLowerCase()])
-                    prompt = savedPrompts[argument.toLowerCase()]
-                    context = {
-                        "messages": [
-                            {"role": "system", "content": prompt}
-                        ]
-                    }
-                    client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
-                } else {
-                    client.sendMessage(config.chatID, `Prompt doesn't exist, run /listprompts to see available options`)
-                }
-                break
-            case '/listprompts':
-                client.sendMessage(config.chatID, 'Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
-                break
+        if (message.id.remote !== config.chatID) {
+            if (message.body === '/setchat') {
+                config.chatID = message.id.remote
+                saveJSON('./config.json', config)
+                console.log('Chat ID set to:', message.id.remote)
+            }
+            return
         }
 
-        return
+        if (message.fromMe === true) {
+            if (!message.body.startsWith('/')) {
+                return
+            }
+        }
+
+        console.log('New message:', message.body)
+
+        if (message.body.startsWith('/')) {
+            const command = message.body.split(' ')[0].toLowerCase()
+            let argument = message.body.substring(message.body.indexOf(' ')+1)
+
+            switch (command) {
+                case '/ask':
+                    const [textResponse, media] = await createResponse(argument)
+                    await client.sendMessage(config.chatID, media, { caption: textResponse })
+                    console.log('Reply sent')
+                    break
+
+                case '/newprompt':
+                    prompt = argument
+                    context = resetContext(prompt)
+                    client.sendMessage(config.chatID, 'Set new prompt')
+                    break
+
+                case '/addtoprompt':
+                    prompt = prompt + '\n' + argument
+                    context = resetContext(prompt)
+                    client.sendMessage(config.chatID, `Added ${argument} to prompt`)
+                    break
+
+                case '/saveprompt':
+                    if (savedPrompts[argument]) {
+                        client.sendMessage(config.chatID, 'Prompt with this name already exists')
+                        break
+                    }
+                    
+                    savedPrompts[argument] = prompt
+                    await saveJSON('./prompts.json', savedPrompts)
+                    client.sendMessage(config.chatID, 'Saved prompt')
+                    break
+
+                case '/loadprompt':
+                    if (savedPrompts[argument.toLowerCase()]) {
+                        prompt = savedPrompts[argument.toLowerCase()]
+                        context = resetContext(prompt)
+                        client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
+                    } else {
+                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see available options`)
+                    }
+                    break
+
+                case '/listprompts':
+                    client.sendMessage(config.chatID, 'Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
+                    break
+            }
+            return
+        }
+        const [textResponse, media] = await createResponse(message.body)
+
+        await client.sendMessage(config.chatID, media, { caption: textResponse })
+
+        console.log('Reply sent')
+    } catch (error) {
+        console.error('Error while sending reply', error)
     }
-
-    const [textResponse, media] = await createResponse(message.body)
-
-    await client.sendMessage(config.chatID, media, { caption: textResponse })
+    
+    
 })
 
 client.initialize();
