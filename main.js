@@ -176,7 +176,7 @@ client.on('message_create', async message => {
         }
 
         if (message.id.remote !== config.chatID) {
-            if (message.body === '/setchat') {
+            if (message.body === '/setchat' && message.fromMe === true) {
                 config.chatID = message.id.remote
                 saveJSON('./config.json', config)
                 console.log('Chat ID set to:', message.id.remote)
@@ -193,62 +193,92 @@ client.on('message_create', async message => {
         console.log('New message:', message.body)
 
         if (message.body.startsWith('/')) {
-            const command = message.body.split(' ')[0].toLowerCase()
-            let argument = message.body.substring(message.body.indexOf(' ')+1)
+            const parts = message.body.split(' ')
+            const command = parts[0]
+            const argument = parts.slice(1).join(" ")
+            
 
-            switch (command) {
-                case '/ask':
-                    const [textResponse, media] = await createResponse(argument)
-                    await client.sendMessage(config.chatID, media, { caption: textResponse })
-                    console.log('Reply sent')
-                    break
-
-                case '/newprompt':
-                    prompt = argument
-                    context = resetContext(prompt)
-                    client.sendMessage(config.chatID, 'Set new prompt')
-                    break
-
-                case '/addtoprompt':
-                    prompt = prompt + '\n' + argument
-                    context = resetContext(prompt)
-                    client.sendMessage(config.chatID, `Added ${argument} to prompt`)
-                    break
-
-                case '/saveprompt':
-                    if (savedPrompts[argument]) {
-                        client.sendMessage(config.chatID, 'Prompt with this name already exists')
-                        break
-                    }
-                    
-                    savedPrompts[argument] = prompt
-                    await saveJSON('./prompts.json', savedPrompts)
-                    client.sendMessage(config.chatID, 'Saved prompt')
-                    break
-
-                case '/loadprompt':
-                    if (savedPrompts[argument.toLowerCase()]) {
-                        prompt = savedPrompts[argument.toLowerCase()]
-                        context = resetContext(prompt)
-                        client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
-                    } else {
-                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
-                    }
-                    break
-                
-                case '/deleteprompt':
-                    if (savedPrompts[argument]) {
-                        delete savedPrompts[argument]
-                        await saveJSON('./prompts.json', savedPrompts)
-                        client.sendMessage(config.chatID, `Deleted prompt ${argument}`)
-                    } else {
-                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
-                    }
-                    break
-
+            switch (command) { // Commands that don't need arguments
                 case '/listprompts':
                     client.sendMessage(config.chatID, 'Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
-                    break
+                    return
+                
+                case '/help':
+                    client.sendMessage(config.chatID, `Commands:
+/ask {message} (useful if you want to interact with the bot from the WhatsApp account it is hosted on)
+/newprompt {prompt} (sets a new system prompt for the AI)
+/addtoprompt {prompt} (adds more to existing system prompt)
+/saveprompt {promptName} (saves system prompt to prompts.json so that it isn't lost after a restart)
+/loadprompt {promptName} (loads system prompt from prompts.json, and sets it for the AI to use)
+/deleteprompt {promptName} (deletes a system prompt saved in prompts.json)
+/listprompts (lists all saved system prompts)
+/setchat (changes the chat ID value in the config to the ID of the channel command is ran in)`)
+                    return
+                
+                default:
+                    const validCommands = ['/ask', '/newprompt', '/addtoprompt', '/saveprompt', '/loadprompt', '/deleteprompt']
+
+                    if (!validCommands.includes(command)) {
+                        client.sendMessage(config.chatID, 'Invalid command, run /help to see all commands')
+                        return
+                    }
+
+                    if (!argument) {
+                        client.sendMessage(config.chatID, 'No argument provided')
+                        return
+                    }
+
+
+                    switch (command) { // Commands that need arguments
+                        case '/ask':
+                            const [textResponse, media] = await createResponse(argument)
+                            await client.sendMessage(config.chatID, media, { caption: textResponse })
+                            console.log('Reply sent')
+                            return
+        
+                        case '/newprompt':
+                            prompt = argument
+                            context = resetContext(prompt)
+                            client.sendMessage(config.chatID, 'Set new prompt')
+                            return
+        
+                        case '/addtoprompt':
+                            prompt = prompt + '\n' + argument
+                            context = resetContext(prompt)
+                            client.sendMessage(config.chatID, `Added ${argument} to prompt`)
+                            return
+        
+                        case '/saveprompt':
+                            if (savedPrompts[argument]) {
+                                client.sendMessage(config.chatID, 'Prompt with this name already exists')
+                                return
+                            }
+                            
+                            savedPrompts[argument] = prompt
+                            await saveJSON('./prompts.json', savedPrompts)
+                            client.sendMessage(config.chatID, 'Saved prompt')
+                            return
+        
+                        case '/loadprompt':
+                            if (savedPrompts[argument.toLowerCase()]) {
+                                prompt = savedPrompts[argument.toLowerCase()]
+                                context = resetContext(prompt)
+                                client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
+                            } else {
+                                client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                            }
+                            return
+                        
+                        case '/deleteprompt':
+                            if (savedPrompts[argument]) {
+                                delete savedPrompts[argument]
+                                await saveJSON('./prompts.json', savedPrompts)
+                                client.sendMessage(config.chatID, `Deleted prompt ${argument}`)
+                            } else {
+                                client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                            }
+                            return
+                    }
             }
             return
         }
