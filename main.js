@@ -115,18 +115,23 @@ Reply with ONLY the prompt`},
 }
 
 async function generateImage(prompt) {
-    const result = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${config.imageModel}`, 
-        {prompt: prompt},
-        {
-            headers: {
-                'Authorization': `Bearer ${config.workersApiKey}`
+    try {
+           const result = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${config.imageModel}`, 
+            {prompt: prompt},
+            {
+                headers: {
+                    'Authorization': `Bearer ${config.workersApiKey}`
+                }
             }
-        }
-    ).then(response => {
-        return response.data.result.image
-    })
+        ).then(response => {
+            return response.data.result.image
+        })
 
-    return result
+        return result
+    } catch (error) {
+        console.error(error)
+        return undefined
+    }
 }
 
 async function processVoice(audio) {
@@ -159,9 +164,17 @@ async function createResponse(prompt) {
 
     const image = await generateImage(imagePrompt)
 
-    console.log("Generated image using prompt:", imagePrompt)
+    let media
 
-    const media = new MessageMedia('image/jpeg', image)
+    if (!image) {
+        console.warn('There was an error generating an image, sending without image')
+        media = undefined
+    } else {
+        console.log("Generated image using prompt:", imagePrompt)
+        media = new MessageMedia('image/jpeg', image)
+    }
+
+    
     return [response, media]
 }
 
@@ -255,7 +268,11 @@ client.on('message_create', async message => {
                     switch (command) { // Commands that need arguments
                         case '/ask':
                             const [textResponse, media] = await createResponse(argument)
-                            await client.sendMessage(config.chatID, media, { caption: textResponse })
+                            if (!media) {
+                                await client.sendMessage(config.chatID, textResponse)
+                            } else {
+                                await client.sendMessage(config.chatID, media, { caption: textResponse })
+                            }
                             console.log('Reply sent')
                             return
         
@@ -307,7 +324,13 @@ client.on('message_create', async message => {
         }
         const [textResponse, media] = await createResponse(userMessage)
 
-        await client.sendMessage(config.chatID, media, { caption: textResponse })
+        if (!media) {
+            await client.sendMessage(config.chatID, textResponse)
+        } else {
+            await client.sendMessage(config.chatID, media, { caption: textResponse })
+        }
+
+        
 
         console.log('Reply sent')
     } catch (error) {
