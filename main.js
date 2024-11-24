@@ -8,14 +8,14 @@ import chalk from 'chalk';
 
 const log = console.log
 
-function logSuccess(message) {
-    console.log(chalk.green(message))
+function logSuccess(message, ...args) {
+    console.log(chalk.green(message, ...args))
 }
-function logWarning(message) {
-    console.log(chalk.hex('#FFA500')(message))
+function logWarning(message, ...args) {
+    console.log(chalk.hex('#FFA500')(message, ...args))
 }
-function logError(message) {
-    console.log(chalk.bold.red(message))
+function logError(message, ...args) {
+    console.log(chalk.bold.red(message, ...args))
 }
 
 let savedPrompts
@@ -72,6 +72,23 @@ async function saveJSON(file, data) {
     }
 }
 
+async function apiRequest(endpoint, data) {
+    try {
+        const response = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${endpoint}`,
+            data,
+            {headers: { Authorization: `Bearer ${config.workersApiKey}` }}
+        )
+        return response.data.result
+    } catch (err) {
+        if (response?.data?.errors) {
+            logError(`API request to ${endpoint} failed`, response.data.errors)
+        } else {
+            logError(`API request to ${endpoint} failed`, err)
+        }
+        return null
+    }
+}
+
 function resetContext(newPrompt) {
     return {
         messages: [
@@ -81,39 +98,28 @@ function resetContext(newPrompt) {
 }
 
 async function generateText(prompt) {
-    try {
-        const messageLimit = config.messageMemoryLimit * 2 + 1 // User message and bot response are considered 1 message, so we multiply by 2, and + 1 is for the system prompt
+    const messageLimit = config.messageMemoryLimit * 2 + 1
 
-        if (context.messages.length >= messageLimit) { // Delete old messages in memory
-            context.messages.splice(1, 2)
-        }
-
-        context.messages.push({"role": "user", "content": prompt})
-
-        const result = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${config.textModel}`, 
-            context,
-            {
-                headers: {
-                    'Authorization': `Bearer ${config.workersApiKey}`
-                }
-            }
-        ).then(response => {
-            return response.data.result.response
-        })
-
-        context.messages.push({"role": "assistant", "content": result})
-
-        return result
-    } catch (err) {
-        logError('Error while generating response', err)
+    // Delete old messages past set memory limit
+    if (context.messages.length >= messageLimit) {
+        context.messages.splice(1, 2)
     }
+
+    context.messages.push({"role": "user", "content": prompt})
+    const result = await apiRequest(config.textModel, context)
+    if (result) {
+        const response = result.response
+        context.messages.push({"role": "assistant", "content": result})
+        return response
+    }
+    return null
 }
 
 async function summarizeForImageGen(prompt) {
-    const result = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${config.textModel}`, 
-        {
-            "messages": [
-                {"role": "system", "content": `You are a concise and creative summarizer. Your task is to convert AI-generated text responses into prompts suitable for an image generation AI. 
+    const result = await apiRequest(config.textModel, {
+        "messages": [
+            {"role": "system", "content": `
+You are a concise and creative summarizer. Your task is to convert AI-generated text responses into prompts suitable for an image generation AI. 
 
 Focus on:
 
@@ -129,70 +135,42 @@ Avoid:
 * **Ambiguity:** Use clear and precise language to minimize misinterpretations by the image AI.
 
 Always prioritize the generation of a single, compelling image that captures the essence of the AI's response.
-Reply with ONLY the prompt`},
-                {"role": "user", "content": prompt}
-            ]
-        },
-        {
-            headers: {
-                'Authorization': `Bearer ${config.workersApiKey}`
-            }
-        }
-    ).then(response => {
-        return response.data.result.response
+Reply with ONLY the prompt
+`},
+            {"role": "user", "content": prompt}
+        ]
     })
 
-    return result
+    return result?.response || null
 }
 
 async function generateImage(prompt) {
-    try {
-           const result = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${config.imageModel}`, 
-            {prompt: prompt},
-            {
-                headers: {
-                    'Authorization': `Bearer ${config.workersApiKey}`
-                }
-            }
-        ).then(response => {
-            return response.data.result.image
-        })
-
-        return result
-    } catch (err) {
-        logError(err)
-        return undefined
-    }
+    const result = await apiRequest(config.imageModel, {prompt: prompt})
+    return result?.image || null
 }
 
 async function processVoice(audio) {
     const decodedBase = Buffer.from(audio.data, 'base64')
 
-    return await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/@cf/openai/whisper`, 
-        decodedBase,
-        {
-            headers: {
-                'Authorization': `Bearer ${config.workersApiKey}`
-            }
-        }
-    ).then(response => {
-        return response.data.result.text
-    })
+    const result = await apiRequest('@cf/openai/whisper', decodedBase)
+
+    return result?.text || null
 }
 
 async function createResponse(prompt) {
 
     let response = await generateText(prompt)
+    if (!response) {
+        return
+    }
     if (response.startsWith('/')) { // Make sure the bot doesn't get itself into a loop
         while (response.startsWith('/')) {
             response = response.slice(1)
         }
     }
-
     log("Generated response:", response)
 
     const imagePrompt = await summarizeForImageGen(response)
-
     const image = await generateImage(imagePrompt)
 
     let media
@@ -207,6 +185,108 @@ async function createResponse(prompt) {
 
     
     return [response, media]
+}
+
+async function handleCommand(message) {
+    const parts = message.split(' ')
+    const command = parts[0]
+    const argument = parts.slice(1).join(" ")
+    
+
+    switch (command) { // Commands that don't need arguments
+        case '/refresh':
+            if (!message.fromMe) {
+                return
+            }
+            await initializeConfig()
+            logSuccess('Refreshed config')
+            return
+        case '/listprompts':
+            client.sendMessage(config.chatID, 'Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
+            return
+        
+        case '/help':
+            client.sendMessage(config.chatID, `Commands:
+/ask {message} (useful if you want to interact with the bot from the WhatsApp account it is hosted on)
+/newprompt {prompt} (sets a new system prompt for the AI)
+/addtoprompt {prompt} (adds more to existing system prompt)
+/saveprompt {promptName} (saves system prompt to prompts.json so that it isn't lost after a restart)
+/loadprompt {promptName} (loads system prompt from prompts.json, and sets it for the AI to use)
+/deleteprompt {promptName} (deletes a system prompt saved in prompts.json)
+/listprompts (lists all saved system prompts)
+/setchat (changes the chat ID value in the config to the ID of the channel command is ran in)
+/refresh (refreshes the config of the bot)`)
+            return
+        
+        default:
+            const validCommands = ['/ask', '/newprompt', '/addtoprompt', '/saveprompt', '/loadprompt', '/deleteprompt']
+
+            if (!validCommands.includes(command)) {
+                client.sendMessage(config.chatID, 'Invalid command, run /help to see all commands')
+                return
+            }
+
+            if (!argument) {
+                client.sendMessage(config.chatID, 'No argument provided')
+                return
+            }
+
+
+            switch (command) { // Commands that need arguments
+                case '/ask':
+                    const [textResponse, media] = await createResponse(argument)
+                    if (!media) {
+                        await client.sendMessage(config.chatID, textResponse)
+                    } else {
+                        await client.sendMessage(config.chatID, media, { caption: textResponse })
+                    }
+                    log('Reply sent')
+                    return
+
+                case '/newprompt':
+                    prompt = argument
+                    context = resetContext(prompt)
+                    client.sendMessage(config.chatID, 'Set new prompt')
+                    return
+
+                case '/addtoprompt':
+                    prompt = prompt + '\n' + argument
+                    context = resetContext(prompt)
+                    client.sendMessage(config.chatID, `Added ${argument} to prompt`)
+                    return
+
+                case '/saveprompt':
+                    if (savedPrompts[argument]) {
+                        client.sendMessage(config.chatID, 'Prompt with this name already exists')
+                        return
+                    }
+                    
+                    savedPrompts[argument] = prompt
+                    await saveJSON('./prompts.json', savedPrompts)
+                    client.sendMessage(config.chatID, 'Saved prompt')
+                    return
+
+                case '/loadprompt':
+                    if (savedPrompts[argument.toLowerCase()]) {
+                        prompt = savedPrompts[argument.toLowerCase()]
+                        context = resetContext(prompt)
+                        client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
+                    } else {
+                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                    }
+                    return
+                
+                case '/deleteprompt':
+                    if (savedPrompts[argument]) {
+                        delete savedPrompts[argument]
+                        await saveJSON('./prompts.json', savedPrompts)
+                        client.sendMessage(config.chatID, `Deleted prompt ${argument}`)
+                    } else {
+                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                    }
+                    return
+            }
+    }
 }
 
 const client = new Client({
@@ -259,108 +339,11 @@ client.on('message_create', async message => {
         }
 
 
-        if (message.type !== 'ptt' && userMessage.startsWith('/')) {
-            const parts = userMessage.split(' ')
-            const command = parts[0]
-            const argument = parts.slice(1).join(" ")
-            
-
-            switch (command) { // Commands that don't need arguments
-                case '/refresh':
-                    if (!message.fromMe) {
-                        return
-                    }
-                    await initializeConfig()
-                    logSuccess('Refreshed config')
-                    return
-                case '/listprompts':
-                    client.sendMessage(config.chatID, 'Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
-                    return
-                
-                case '/help':
-                    client.sendMessage(config.chatID, `Commands:
-/ask {message} (useful if you want to interact with the bot from the WhatsApp account it is hosted on)
-/newprompt {prompt} (sets a new system prompt for the AI)
-/addtoprompt {prompt} (adds more to existing system prompt)
-/saveprompt {promptName} (saves system prompt to prompts.json so that it isn't lost after a restart)
-/loadprompt {promptName} (loads system prompt from prompts.json, and sets it for the AI to use)
-/deleteprompt {promptName} (deletes a system prompt saved in prompts.json)
-/listprompts (lists all saved system prompts)
-/setchat (changes the chat ID value in the config to the ID of the channel command is ran in)
-/refresh (refreshes the config of the bot)`)
-                    return
-                
-                default:
-                    const validCommands = ['/ask', '/newprompt', '/addtoprompt', '/saveprompt', '/loadprompt', '/deleteprompt']
-
-                    if (!validCommands.includes(command)) {
-                        client.sendMessage(config.chatID, 'Invalid command, run /help to see all commands')
-                        return
-                    }
-
-                    if (!argument) {
-                        client.sendMessage(config.chatID, 'No argument provided')
-                        return
-                    }
-
-
-                    switch (command) { // Commands that need arguments
-                        case '/ask':
-                            const [textResponse, media] = await createResponse(argument)
-                            if (!media) {
-                                await client.sendMessage(config.chatID, textResponse)
-                            } else {
-                                await client.sendMessage(config.chatID, media, { caption: textResponse })
-                            }
-                            log('Reply sent')
-                            return
-        
-                        case '/newprompt':
-                            prompt = argument
-                            context = resetContext(prompt)
-                            client.sendMessage(config.chatID, 'Set new prompt')
-                            return
-        
-                        case '/addtoprompt':
-                            prompt = prompt + '\n' + argument
-                            context = resetContext(prompt)
-                            client.sendMessage(config.chatID, `Added ${argument} to prompt`)
-                            return
-        
-                        case '/saveprompt':
-                            if (savedPrompts[argument]) {
-                                client.sendMessage(config.chatID, 'Prompt with this name already exists')
-                                return
-                            }
-                            
-                            savedPrompts[argument] = prompt
-                            await saveJSON('./prompts.json', savedPrompts)
-                            client.sendMessage(config.chatID, 'Saved prompt')
-                            return
-        
-                        case '/loadprompt':
-                            if (savedPrompts[argument.toLowerCase()]) {
-                                prompt = savedPrompts[argument.toLowerCase()]
-                                context = resetContext(prompt)
-                                client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
-                            } else {
-                                client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
-                            }
-                            return
-                        
-                        case '/deleteprompt':
-                            if (savedPrompts[argument]) {
-                                delete savedPrompts[argument]
-                                await saveJSON('./prompts.json', savedPrompts)
-                                client.sendMessage(config.chatID, `Deleted prompt ${argument}`)
-                            } else {
-                                client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
-                            }
-                            return
-                    }
-            }
+        if (userMessage.startsWith('/')) {
+            await handleCommand(userMessage)
             return
         }
+
         const [textResponse, media] = await createResponse(userMessage)
 
         if (!media) {
