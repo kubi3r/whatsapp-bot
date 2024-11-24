@@ -233,6 +233,14 @@ client.on('message_create', async message => {
         if (typeof message.body !== 'string' && message.type !== 'ptt') {
             return
         }
+        if (message.id.remote !== config.chatID) {
+            if (message.body === '/setchat' && message.fromMe === true) {
+                config.chatID = message.id.remote
+                await saveJSON('./config.json', config)
+                logSuccess('Chat ID set to:', message.id.remote)
+            }
+            return
+        }
 
         if (message.fromMe === true && message.type !== 'ptt') {
             if (!message.body.startsWith('/')) {
@@ -258,14 +266,6 @@ client.on('message_create', async message => {
             
 
             switch (command) { // Commands that don't need arguments
-                case `/setchat`:
-                    if (!message.fromMe) {
-                        return
-                    }
-                    config.chatID = message.id.remote
-                    await saveJSON('./config.json', config)
-                    logSuccess('Chat ID set to:', message.id.remote)
-                    return
                 case '/refresh':
                     if (!message.fromMe) {
                         return
