@@ -6,6 +6,8 @@ import fs from 'fs/promises';
 import chalk from 'chalk';
 
 
+let startTimestamp
+
 const log = console.log
 
 function logSuccess(message, ...args) {
@@ -300,6 +302,7 @@ const client = new Client({
 });
 
 client.once('ready', () => {
+    startTimestamp = Math.floor(Date.now() / 1000)
     logSuccess('Started listening for messages')
     if (!config.chatID) {
         logWarning('Chat ID is not set, bot will not respond to any messages until you specify a chat. This can be done by setting it in the config file, or automatically by running /setchat in your chosen channel.')
@@ -313,6 +316,11 @@ client.on('qr', qr => {
 
 client.on('message_create', async message => {
     try {
+        // Do not respond to old messages
+        if (message.timestamp < startTimestamp) {
+            return
+        }
+
         if (typeof message.body !== 'string' && message.type !== 'ptt') {
             return
         }
