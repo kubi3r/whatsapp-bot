@@ -73,6 +73,7 @@ async function saveJSON(file, data) {
 }
 
 async function apiRequest(endpoint, data) {
+    logWarning('Data:', JSON.stringify(data, null, 4))
     try {
         const response = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${endpoint}`,
             data,
@@ -80,11 +81,7 @@ async function apiRequest(endpoint, data) {
         )
         return response.data.result
     } catch (err) {
-        if (response?.data?.errors) {
-            logError(`API request to ${endpoint} failed`, response.data.errors)
-        } else {
-            logError(`API request to ${endpoint} failed`, err)
-        }
+        logError(JSON.stringify(err.response.data.errors, null, 4))
         return null
     }
 }
@@ -188,7 +185,9 @@ async function createResponse(prompt) {
 }
 
 async function handleCommand(message) {
-    const parts = message.split(' ')
+    const messageBody = message.body
+
+    const parts = messageBody.split(' ')
     const command = parts[0]
     const argument = parts.slice(1).join(" ")
     
@@ -199,6 +198,10 @@ async function handleCommand(message) {
                 return
             }
             await initializeConfig()
+
+            prompt = config.defaultPrompt
+            context = resetContext(prompt)
+
             logSuccess('Refreshed config')
             return
         case '/listprompts':
@@ -340,7 +343,7 @@ client.on('message_create', async message => {
 
 
         if (userMessage.startsWith('/')) {
-            await handleCommand(userMessage)
+            await handleCommand(message)
             return
         }
 
