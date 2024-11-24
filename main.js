@@ -1,39 +1,47 @@
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
-const axios = require('axios');
-const fs = require('fs').promises;
-
-
-if (!fs.existsSync('./prompts.json') || fs.statSync('./prompts.json').size == 0) { // If file doesn't exist/is empty
-    fs.writeFileSync('./prompts.json', '{}', { flag: 'w+' })
-}
+import whatsappWeb from 'whatsapp-web.js';
+const { Client, LocalAuth, MessageMedia } = whatsappWeb;
+import qrcode from 'qrcode-terminal';
+import axios from 'axios';
+import fs from 'fs/promises';
 
 let savedPrompts
 let config
 
-(async () => {
-    savedPrompts = await readJSON('./prompts.json')
-    config = await readJSON('./config.json')
-})()
-
-
-let prompt = config.defaultPrompt
-
-let context = {
-    "messages": [
-        {"role": "system", "content": prompt}
-    ]
+async function initializeConfig() {
+    try { // Load prompts.json
+        savedPrompts = await readJSON('./prompts.json')
+    } catch (error) {
+        if (error.code === 'ENOENT') { // If prompts.json doesn't exist
+            console.log('Creating prompts.json')
+            await fs.writeFile('./prompts.json', '{}', { flag: 'w' })
+            savedPrompts = {}
+            console.log('Created prompts.json')
+        } else {
+            console.error('Error reading prompts.json:', error)
+            process.exit(1)
+        }
+    }
+    
+    try { // Load config.json
+        config = await readJSON('./config.json')
+    } catch (error) {
+        if (error.code === 'ENOENT') { // If config.json doesn't exist
+            console.log('Creating config.json')
+            const configExample = await fs.readFile('./config.example.json')
+            await fs.writeFile('./config.json', configExample, { flag: 'w' })
+            console.log('Created config.json, please fill it out before relaunching')
+            process.exit(0)
+        } else {
+            console.error('Error reading config.json', error)
+            process.exit(1)
+        }
+    }
 }
 
 
 async function readJSON(file) {
-    try {
-        const data = await fs.readFile(file);
-        return JSON.parse(data);
-    } catch (error) {
-        console.error('Error reading file:', error)
-        process.exit(1)
-    }
+    const data = await fs.readFile(file);
+    return JSON.parse(data);
 }
 
 async function saveJSON(file, data) {
@@ -60,7 +68,9 @@ function resetContext(newPrompt) {
 
 async function generateText(prompt) {
     try {
-        if (context.messages.length >= 11) { // Keep 5 messages in memory
+        const messageLimit = config.messageMemoryLimit * 2 + 1 // User message and bot response are considered 1 message, so we multiply by 2, and + 1 is for the system prompt
+
+        if (context.messages.length >= messageLimit) { // Delete old messages in memory
             context.messages.splice(1, 2)
         }
 
@@ -346,5 +356,15 @@ client.on('message_create', async message => {
     
     
 })
+
+await initializeConfig()
+
+let prompt = config.defaultPrompt
+
+let context = {
+    "messages": [
+        {"role": "system", "content": prompt}
+    ]
+}
 
 client.initialize();

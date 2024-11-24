@@ -27,5 +27,6 @@
   },
   "overrides": {
     "ws": "^8.18.0"
-  }
+  },
+  "type": "module"
 }
