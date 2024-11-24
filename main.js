@@ -1,14 +1,21 @@
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const axios = require('axios');
-const fs = require('fs');
+const fs = require('fs').promises;
+
 
 if (!fs.existsSync('./prompts.json') || fs.statSync('./prompts.json').size == 0) { // If file doesn't exist/is empty
     fs.writeFileSync('./prompts.json', '{}', { flag: 'w+' })
 }
 
-let savedPrompts = readJSON('./prompts.json')
-let config = readJSON('./config.json')
+let savedPrompts
+let config
+
+(async () => {
+    savedPrompts = await readJSON('./prompts.json')
+    config = await readJSON('./config.json')
+})()
+
 
 let prompt = config.defaultPrompt
 
@@ -19,12 +26,13 @@ let context = {
 }
 
 
-function readJSON(file) {
+async function readJSON(file) {
     try {
-        const data = fs.readFileSync(file);
+        const data = await fs.readFile(file);
         return JSON.parse(data);
-    } catch (err) {
-        throw err;
+    } catch (error) {
+        console.error('Error reading file:', error)
+        process.exit(1)
     }
 }
 
@@ -34,12 +42,11 @@ async function saveJSON(file, data) {
             data = JSON.stringify(data, null, 4);
         }
     
-        await fs.promises.writeFile(file, data).then(() => {
-            console.log('Successfully saved', file)
-        })
-        
+        await fs.writeFile(file, data)
+        console.log('Successfully saved', file)
     } catch (error) {
-        throw error
+        console.error('Error saving file:', error)
+        process.exit(1)
     }
 }
 
