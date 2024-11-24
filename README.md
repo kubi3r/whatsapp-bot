@@ -11,6 +11,7 @@ WhatsApp bot made using wweb.js that uses AI to respond to messages with text an
 * `/deleteprompt {promptName}` (deletes a system prompt saved in prompts.json)
 * `/listprompts` (lists all saved system prompts)
 * `/setchat` (changes the chat ID value in the config to the ID of the channel command is ran in)
+* `/refresh` (refreshes the config of the bot)
 
 Currently cloudflare provides API access to AI models for free
 
