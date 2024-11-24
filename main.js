@@ -256,23 +256,23 @@ async function handleCommand(message) {
                     return
 
                 case '/saveprompt':
-                    if (savedPrompts[argument]) {
+                    if (savedPrompts[argument.toLowerCase()]) {
                         client.sendMessage(config.chatID, 'Prompt with this name already exists')
                         return
                     }
                     
-                    savedPrompts[argument] = prompt
+                    savedPrompts[argument.toLowerCase()] = prompt
                     await saveJSON('./prompts.json', savedPrompts)
-                    client.sendMessage(config.chatID, 'Saved prompt')
+                    client.sendMessage(config.chatID, 'Saved prompt', argument.toLowerCase())
                     return
 
                 case '/loadprompt':
                     if (savedPrompts[argument.toLowerCase()]) {
                         prompt = savedPrompts[argument.toLowerCase()]
                         context = resetContext(prompt)
-                        client.sendMessage(config.chatID, `Loaded prompt ${argument}`)
+                        client.sendMessage(config.chatID, `Loaded prompt ${argument.toLowerCase()}`)
                     } else {
-                        client.sendMessage(config.chatID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                        client.sendMessage(config.chatID, `Prompt ${argument.toLowerCase()} doesn't exist, run /listprompts to see all prompts`)
                     }
                     return
                 
