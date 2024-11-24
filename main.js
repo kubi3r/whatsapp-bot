@@ -106,7 +106,7 @@ async function generateText(prompt) {
     const result = await apiRequest(config.textModel, context)
     if (result) {
         const response = result.response
-        context.messages.push({"role": "assistant", "content": result})
+        context.messages.push({"role": "assistant", "content": response})
         return response
     }
     return null
