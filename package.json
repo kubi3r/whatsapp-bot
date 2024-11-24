@@ -18,6 +18,7 @@
   "homepage": "https://github.com/kubi3r/whatsapp-bot#readme",
   "dependencies": {
     "axios": "^1.7.7",
+    "chalk": "^5.3.0",
     "dotenv": "^16.4.5",
     "puppeteer": "^23.8.0",
     "puppeteer-core": "^23.8.0",

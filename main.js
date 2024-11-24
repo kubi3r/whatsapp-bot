@@ -3,6 +3,20 @@ const { Client, LocalAuth, MessageMedia } = whatsappWeb;
 import qrcode from 'qrcode-terminal';
 import axios from 'axios';
 import fs from 'fs/promises';
+import chalk from 'chalk';
+
+
+const log = console.log
+
+function logSuccess(message) {
+    console.log(chalk.green(message))
+}
+function logWarning(message) {
+    console.log(chalk.hex('#FFA500')(message))
+}
+function logError(message) {
+    console.log(chalk.bold.red(message))
+}
 
 let savedPrompts
 let config
@@ -10,29 +24,29 @@ let config
 async function initializeConfig() {
     try { // Load prompts.json
         savedPrompts = await readJSON('./prompts.json')
-    } catch (error) {
-        if (error.code === 'ENOENT') { // If prompts.json doesn't exist
-            console.log('Creating prompts.json')
+    } catch (err) {
+        if (err.code === 'ENOENT') { // If prompts.json doesn't exist
+            logWarning('prompts.json not found, creating')
             await fs.writeFile('./prompts.json', '{}', { flag: 'w' })
             savedPrompts = {}
-            console.log('Created prompts.json')
+            logSuccess('Created prompts.json')
         } else {
-            console.error('Error reading prompts.json:', error)
+            logError('Error reading prompts.json:', err)
             process.exit(1)
         }
     }
     
     try { // Load config.json
         config = await readJSON('./config.json')
-    } catch (error) {
-        if (error.code === 'ENOENT') { // If config.json doesn't exist
-            console.log('Creating config.json')
+    } catch (err) {
+        if (err.code === 'ENOENT') { // If config.json doesn't exist
+            logWarning('config.json not found, creating')
             const configExample = await fs.readFile('./config.example.json')
             await fs.writeFile('./config.json', configExample, { flag: 'w' })
-            console.log('Created config.json, please fill it out before relaunching')
+            logSuccess('Created config.json, please fill it out before relaunching')
             process.exit(0)
         } else {
-            console.error('Error reading config.json', error)
+            logError('Error reading config.json', err)
             process.exit(1)
         }
     }
@@ -51,9 +65,9 @@ async function saveJSON(file, data) {
         }
     
         await fs.writeFile(file, data)
-        console.log('Successfully saved', file)
-    } catch (error) {
-        console.error('Error saving file:', error)
+        logSuccess('Successfully saved', file)
+    } catch (err) {
+        logError('Error saving file:', err)
         process.exit(1)
     }
 }
@@ -90,8 +104,8 @@ async function generateText(prompt) {
         context.messages.push({"role": "assistant", "content": result})
 
         return result
-    } catch (error) {
-        console.log(error)
+    } catch (err) {
+        logError('Error while generating response', err)
     }
 }
 
@@ -145,8 +159,8 @@ async function generateImage(prompt) {
         })
 
         return result
-    } catch (error) {
-        console.error(error)
+    } catch (err) {
+        logError(err)
         return undefined
     }
 }
@@ -175,7 +189,7 @@ async function createResponse(prompt) {
         }
     }
 
-    console.log("Generated response:", response)
+    log("Generated response:", response)
 
     const imagePrompt = await summarizeForImageGen(response)
 
@@ -184,10 +198,10 @@ async function createResponse(prompt) {
     let media
 
     if (!image) {
-        console.warn('There was an error generating an image, sending without image')
+        logWarning('There was an error generating an image, sending without image')
         media = undefined
     } else {
-        console.log("Generated image using prompt:", imagePrompt)
+        log("Generated image using prompt:", imagePrompt)
         media = new MessageMedia('image/jpeg', image)
     }
 
@@ -203,14 +217,14 @@ const client = new Client({
 });
 
 client.once('ready', () => {
-    console.log('Started listening for messages')
+    logSuccess('Started listening for messages')
     if (!config.chatID) {
-        console.warn('Chat ID is not set, bot will not respond to any messages until you specify a chat. This can be done by setting it in the config file, or automatically by running /setchat in your chosen channel.')
+        logWarning('Chat ID is not set, bot will not respond to any messages until you specify a chat. This can be done by setting it in the config file, or automatically by running /setchat in your chosen channel.')
     }
 })
 
 client.on('qr', qr => {
-    console.log('Scan in WhatsApp to log in')
+    log('Scan in WhatsApp to log in')
     qrcode.generate(qr, {small: true})
 })
 
@@ -223,7 +237,7 @@ client.on('message_create', async message => {
             if (message.body === '/setchat' && message.fromMe === true) {
                 config.chatID = message.id.remote
                 await saveJSON('./config.json', config)
-                console.log('Chat ID set to:', message.id.remote)
+                logSuccess('Chat ID set to:', message.id.remote)
             }
             return
         }
@@ -238,10 +252,10 @@ client.on('message_create', async message => {
 
         if (message.type === 'ptt') { // Handle voice messages
             userMessage = await processVoice(await message.downloadMedia())
-            console.log('New voice message:', userMessage)
+            log('New voice message:', userMessage)
         } else {
             userMessage = message.body
-            console.log('New message:', userMessage)
+            log('New message:', userMessage)
         }
 
 
@@ -290,7 +304,7 @@ client.on('message_create', async message => {
                             } else {
                                 await client.sendMessage(config.chatID, media, { caption: textResponse })
                             }
-                            console.log('Reply sent')
+                            log('Reply sent')
                             return
         
                         case '/newprompt':
@@ -349,9 +363,9 @@ client.on('message_create', async message => {
 
         
 
-        console.log('Reply sent')
-    } catch (error) {
-        console.error('Error while sending reply', error)
+        log('Reply sent')
+    } catch (err) {
+        logError('Error while sending reply', err)
     }
     
     
