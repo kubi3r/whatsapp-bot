@@ -136,19 +136,19 @@ function resetContext(newPrompt) {
     }
 }
 
-async function generateText(prompt, msgID) {
+async function generateText(prompt, groupID) {
     const messageLimit = config.messageMemoryLimit * 2 + 1
 
     // Delete old messages past set memory limit
-    if (context[msgID].messages.length >= messageLimit) {
-        context[msgID].messages.splice(1, 2)
+    if (context[groupID].messages.length >= messageLimit) {
+        context[groupID].messages.splice(1, 2)
     }
 
-    context[msgID].messages.push({"role": "user", "content": prompt})
-    const result = await apiRequest(config.textModel, context[msgID])
+    context[groupID].messages.push({"role": "user", "content": prompt})
+    const result = await apiRequest(config.textModel, context[groupID])
     if (result) {
         const response = result.response
-        context[msgID].messages.push({"role": "assistant", "content": response})
+        context[groupID].messages.push({"role": "assistant", "content": response})
         return response
     }
     return null
@@ -196,9 +196,9 @@ async function processVoice(audio) {
     return result?.text || null
 }
 
-async function createResponse(prompt, msgID) {
+async function createResponse(prompt, chatID) {
 
-    let response = await generateText(prompt, msgID)
+    let response = await generateText(prompt, chatID)
     if (!response) {
         return
     }
@@ -226,8 +226,8 @@ async function createResponse(prompt, msgID) {
     return [response, media]
 }
 
-async function handleCommand(message, msgID) {
-    logWarning(msgID)
+async function handleCommand(message, groupID) {
+    logWarning(message.id)
     const messageBody = message.body
 
     const parts = messageBody.split(' ')
@@ -248,11 +248,11 @@ async function handleCommand(message, msgID) {
             logSuccess('Refreshed config')
             return
         case '/listprompts':
-            client.sendMessage(msgID, 'Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
+            await message.reply('Prompts:\n\n' + Object.keys(savedPrompts).join('\n'))
             return
         
         case '/help':
-            client.sendMessage(msgID, `Commands:
+            await message.reply(`Commands:
 /ask {message} (useful if you want to interact with the bot from the WhatsApp account it is hosted on)
 /newprompt {prompt} (sets a new system prompt for the AI)
 /addtoprompt {prompt} (adds more to existing system prompt)
@@ -268,23 +268,23 @@ async function handleCommand(message, msgID) {
             const validCommands = ['/ask', '/newprompt', '/addtoprompt', '/saveprompt', '/loadprompt', '/deleteprompt']
 
             if (!validCommands.includes(command)) {
-                client.sendMessage(msgID, 'Invalid command, run /help to see all commands')
+                await message.reply('Invalid command, run /help to see all commands')
                 return
             }
 
             if (!argument) {
-                client.sendMessage(msgID, 'No argument provided')
+                await message.reply('No argument provided')
                 return
             }
 
 
             switch (command) { // Commands that need arguments
                 case '/ask':
-                    const [textResponse, media] = await createResponse(argument, message.id.remote)
+                    const [textResponse, media] = await createResponse(argument, groupID)
                     if (!media) {
-                        await client.sendMessage(msgID, textResponse)
+                        await message.reply(textResponse)
                     } else {
-                        await client.sendMessage(msgID, media, { caption: textResponse })
+                        await message.reply(media, { caption: textResponse })
                     }
                     log('Reply sent')
                     return
@@ -292,33 +292,33 @@ async function handleCommand(message, msgID) {
                 case '/newprompt':
                     prompt = argument
                     context[msgID] = resetContext(prompt)
-                    client.sendMessage(msgID, 'Set new prompt')
+                    await message.reply('Set new prompt')
                     return
 
                 case '/addtoprompt':
                     prompt = prompt + '\n' + argument
                     context[msgID] = resetContext(prompt)
-                    client.sendMessage(msgID, `Added ${argument} to prompt`)
+                    await message.reply(`Added ${argument} to prompt`)
                     return
 
                 case '/saveprompt':
                     if (savedPrompts[argument.toLowerCase()]) {
-                        client.sendMessage(msgID, 'Prompt with this name already exists')
+                        await message.reply('Prompt with this name already exists')
                         return
                     }
                     
                     savedPrompts[argument.toLowerCase()] = prompt
                     await saveJSON('./prompts.json', savedPrompts)
-                    client.sendMessage(msgID, 'Saved prompt', argument.toLowerCase())
+                    await message.reply('Saved prompt', argument.toLowerCase())
                     return
 
                 case '/loadprompt':
                     if (savedPrompts[argument.toLowerCase()]) {
                         prompt = savedPrompts[argument.toLowerCase()]
                         context[msgID] = resetContext(prompt)
-                        client.sendMessage(msgID, `Loaded prompt ${argument.toLowerCase()}`)
+                        await message.reply(`Loaded prompt ${argument.toLowerCase()}`)
                     } else {
-                        client.sendMessage(msgID, `Prompt ${argument.toLowerCase()} doesn't exist, run /listprompts to see all prompts`)
+                        await message.reply(`Prompt ${argument.toLowerCase()} doesn't exist, run /listprompts to see all prompts`)
                     }
                     return
                 
@@ -326,9 +326,9 @@ async function handleCommand(message, msgID) {
                     if (savedPrompts[argument]) {
                         delete savedPrompts[argument]
                         await saveJSON('./prompts.json', savedPrompts)
-                        client.sendMessage(msgID, `Deleted prompt ${argument}`)
+                        await message.reply(`Deleted prompt ${argument}`)
                     } else {
-                        client.sendMessage(msgID, `Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
+                        await message.reply(`Prompt ${argument} doesn't exist, run /listprompts to see all prompts`)
                     }
                     return
             }
@@ -365,27 +365,30 @@ client.on('message_create', async message => {
         if (typeof message.body !== 'string' && message.type !== 'ptt') {
             return
         }
-        if (!config.chatID.includes(message.id.remote)) {
-            if (message.body === '/addchat' && message.fromMe === true) {
 
-                config.chatID.push(message.id.remote)
+        const group = await message.getChat()
+        const groupID = group.id._serialized
+
+        logWarning(groupID)
+
+        if (!config.chatID.includes(groupID)) {
+            if (message.body === '/addchat' && message.fromMe === true) {
+                config.chatID.push(groupID)
+
                 await saveJSON('./config.json', config)
 
-                context[message.id.remote] = resetContext(prompt)
-
-                logSuccess('Chat ID added:', message.id.remote)
-                
+                context[groupID] = resetContext(prompt)
+                logSuccess('Chat ID added:', groupID)
                 return
-                
             }
             return
         } else if (message.body === '/removechat' && message.fromMe === true) {
-            config.chatID.splice(config.chatID.indexOf(message.id.remote), 1)
+            config.chatID.splice(config.chatID.indexOf(groupID), 1)
             await saveJSON('./config.json', config)
 
-            delete context[message.id.remote]
+            delete context[groupID]
 
-            logSuccess(`Chat ${message.id.remote} has been removed`)
+            logSuccess(`Chat ${groupID} has been removed`)
             return
         }
 
@@ -407,16 +410,16 @@ client.on('message_create', async message => {
 
 
         if (userMessage.startsWith('/')) {
-            await handleCommand(message, message.id.remote)
+            await handleCommand(message, groupID)
             return
         }
 
-        const [textResponse, media] = await createResponse(userMessage, message.id.remote)
+        const [textResponse, media] = await createResponse(userMessage, groupID)
 
         if (!media) {
-            await client.sendMessage(config.chatID[message.id.remote], textResponse)
+            await client.sendMessage(config.chatID[groupID], textResponse)
         } else {
-            await client.sendMessage(config.chatID[message.id.remote], media, { caption: textResponse })
+            await client.sendMessage(config.chatID[groupID], media, { caption: textResponse })
         }
 
         
