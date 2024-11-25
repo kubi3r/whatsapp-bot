@@ -10,7 +10,8 @@ WhatsApp bot made using wweb.js that uses AI to respond to messages with text an
 * `/loadprompt {promptName}` (loads system prompt from prompts.json, and sets it for the AI to use)
 * `/deleteprompt {promptName}` (deletes a system prompt saved in prompts.json)
 * `/listprompts` (lists all saved system prompts)
-* `/setchat` (changes the chat ID value in the config to the ID of the channel command is ran in)
+* `/addchat` (adds chat id of the chat to config)
+* `/removechat` (removes chat id of the chat from config)
 * `/refresh` (refreshes the config of the bot)
 
 Currently cloudflare provides API access to AI models for free
@@ -19,13 +20,15 @@ Currently cloudflare provides API access to AI models for free
 
 Install Node.JS on your computer: https://nodejs.org/en
 
-Create a config.json file and fill it following the example in config.example.json
+Run `npm install && npm start`, it will automatically make the required config files.
 
-To get a chat ID:
+Fill in config.json, don't touch prompts.json
 
-If you don't know how to find one, when you have started the bot, run /setchat in the chat you want to use the bot in
+For chat ID:
+Leave it as it is (should be an empty array: `[]`), and when you have launched the bot run /addchat in the chat you want to use it in, or /removechat to remove the chat.
+The bot does support responding in multiple chats, with seperate message contexts and prompts
 
-To get an api key and account id:
+To get an API key and account ID:
 
 1. Create a cloudflare account.
 2. On your dashboard, in the left sidebar navigate to AI > Workers AI
@@ -35,6 +38,10 @@ To get an api key and account id:
 6. Press "Create API Token"
 7. Copy API Token into config
 
-Then, run the following in your terminal: npm install && npm start
-
 List of models you can use: https://developers.cloudflare.com/workers-ai/models/
+
+Default prompt is just the system prompt it has at start
+
+Message memory limit is how many previous message it will keep in its context
+
+Finally, run: npm install && npm start

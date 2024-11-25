@@ -1,5 +1,5 @@
 {
-    "chatID": "",
+    "chatID": [],
     "workersApiKey": "",
     "workersAccountID": "",
     "textModel": "@cf/meta/llama-3.1-70b-instruct",
