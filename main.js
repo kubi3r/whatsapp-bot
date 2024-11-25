@@ -258,7 +258,8 @@ async function handleCommand(message, groupID) {
 /loadprompt {promptName} (loads system prompt from prompts.json, and sets it for the AI to use)
 /deleteprompt {promptName} (deletes a system prompt saved in prompts.json)
 /listprompts (lists all saved system prompts)
-/setchat (changes the chat ID value in the config to the ID of the channel command is ran in)
+/addchat (makes bot respond to messages in the chat that the command is ran in)
+/removechat (removes chat from list of chats where bot responds to messages)
 /refresh (refreshes the config of the bot)`)
             return
         
