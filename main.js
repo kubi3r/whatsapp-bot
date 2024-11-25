@@ -115,7 +115,6 @@ async function saveJSON(file, data) {
 }
 
 async function apiRequest(endpoint, data) {
-    logWarning('Data:', JSON.stringify(data, null, 4))
     try {
         const response = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${config.workersAccountID}/ai/run/${endpoint}`,
             data,
@@ -227,7 +226,6 @@ async function createResponse(prompt, chatID) {
 }
 
 async function handleCommand(message, groupID) {
-    logWarning(message.id)
     const messageBody = message.body
 
     const parts = messageBody.split(' ')
@@ -368,8 +366,6 @@ client.on('message_create', async message => {
 
         const group = await message.getChat()
         const groupID = group.id._serialized
-
-        logWarning(groupID)
 
         if (!config.chatID.includes(groupID)) {
             if (message.body === '/addchat' && message.fromMe === true) {
