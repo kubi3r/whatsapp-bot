@@ -280,22 +280,22 @@ async function handleCommand(message, groupID) {
                 case '/ask':
                     const [textResponse, media] = await createResponse(argument, groupID)
                     if (!media) {
-                        await message.reply(textResponse)
+                        await client.sendMessage(groupID, textResponse)
                     } else {
-                        await message.reply(media, { caption: textResponse })
+                        await client.sendMessage(groupID, media, { caption: textResponse })
                     }
                     log('Reply sent')
                     return
 
                 case '/newprompt':
                     prompt = argument
-                    context[msgID] = resetContext(prompt)
+                    context[groupID] = resetContext(prompt)
                     await message.reply('Set new prompt')
                     return
 
                 case '/addtoprompt':
                     prompt = prompt + '\n' + argument
-                    context[msgID] = resetContext(prompt)
+                    context[groupID] = resetContext(prompt)
                     await message.reply(`Added ${argument} to prompt`)
                     return
 
@@ -313,7 +313,7 @@ async function handleCommand(message, groupID) {
                 case '/loadprompt':
                     if (savedPrompts[argument.toLowerCase()]) {
                         prompt = savedPrompts[argument.toLowerCase()]
-                        context[msgID] = resetContext(prompt)
+                        context[groupID] = resetContext(prompt)
                         await message.reply(`Loaded prompt ${argument.toLowerCase()}`)
                     } else {
                         await message.reply(`Prompt ${argument.toLowerCase()} doesn't exist, run /listprompts to see all prompts`)
@@ -413,9 +413,9 @@ client.on('message_create', async message => {
         const [textResponse, media] = await createResponse(userMessage, groupID)
 
         if (!media) {
-            await client.sendMessage(config.chatID[groupID], textResponse)
+            await client.sendMessage(groupID, textResponse)
         } else {
-            await client.sendMessage(config.chatID[groupID], media, { caption: textResponse })
+            await client.sendMessage(groupID, media, { caption: textResponse })
         }
 
         
